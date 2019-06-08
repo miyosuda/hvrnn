@@ -21,17 +21,15 @@ Dataset: Moving MNIST
 
 ![timeline](doc/timeline.png)
 
+Figures on the left below show the mean of the 16 latent variables in each hierarchical layer with the input of the time series sequence shown above. Figures on the right below show the normalized mutual information between latent variables and the factors. With HVRNN setting with 3 layers, the first layer clearly extracts x and y movements of the digit and the second layer extracts the moment of the bouncing with horizontal and vertical walls.
 
-
-Figures on the left below show the mean of the latent variables in each hierarchical layers. Figures on the right below show the normalized mutual information between latent variables and the factors.
-
-#### VRNN
+#### VRNN (1 layer setting)
 
 ![layer1](doc/layer1.png)
 
 
 
-#### HVRNN
+#### HVRNN (3 layers setting)
 
 ![layer3](doc/layer3.png)
 
