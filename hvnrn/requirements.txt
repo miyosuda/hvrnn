@@ -1,0 +1,5 @@
+scipy
+pillow
+matplotlib
+opencv-python
+
