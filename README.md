@@ -3,9 +3,9 @@
 Code for the paper "Do top-down predictions of time series lead to sparse
 disentanglement?" (Miyoshi et al. 2018)
 
-Poster:
+Poster: https://drive.google.com/open?id=1zUrovQFNZ1AnSWkwGzEEgm2rk9lvoJY7
 
-https://drive.google.com/open?id=1zUrovQFNZ1AnSWkwGzEEgm2rk9lvoJY7
+Paper: [http://jnns.org/conference/2018/JNNS2018_Proceedings/JNNS2018_Proceedings.pdf](http://jnns.org/conference/2018/JNNS2018_Proceedings/JNNS2018_Proceedings.pdf) [p15-16]
 
 
 
@@ -15,33 +15,23 @@ https://drive.google.com/open?id=1zUrovQFNZ1AnSWkwGzEEgm2rk9lvoJY7
 
 
 
+## Disentanglement result
+
+Dataset: Moving MNIST
+
+![timeline](doc/timeline.png)
 
 
-## Results
 
-### Latent
-
-#### VRNN
-
-![predict_enc_mu0](doc/latent/layer1/predict_enc_mu0.png)
-
-#### HVRNN
-
-![predict_enc_mu_all](doc/latent/layer3/predict_enc_mu_all.png)
-
-### Mutual information
+Figures on the left below show the mean of the latent variables in each hierarchical layers. Figures on the right below show the normalized mutual information between latent variables and the factors.
 
 #### VRNN
 
-![mi_grid_norm_0](doc/mutual_info/layer1/mi_grid_norm_0.png)
+![layer1](doc/layer1.png)
+
+
 
 #### HVRNN
 
-![mi_grid_norm_0](doc/mutual_info/layer3/mi_grid_norm_0.png)
-
-![mi_grid_norm_1](doc/mutual_info/layer3/mi_grid_norm_1.png)
-
-![mi_grid_norm_2](doc/mutual_info/layer3/mi_grid_norm_2.png)
-
-
+![layer3](doc/layer3.png)
 
