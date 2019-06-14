@@ -6,7 +6,7 @@ from __future__ import print_function
 import tensorflow as tf
 from datetime import datetime as dt
 
-# 無視するflagsのキー
+# Key of the flags to ingore
 ignore_keys = set(["h", "help", "helpfull", "helpshort"])
 
 
@@ -39,7 +39,7 @@ def get_options():
     tf.app.flags.DEFINE_integer("layer_size", 3, "hierarchy layer size")
     tf.app.flags.DEFINE_string("desc", "hvrnn experiment", "experiment description")
 
-    # analyze/decodeのみで利用
+    # Ued only for analyze
     tf.app.flags.DEFINE_boolean("collect_data", True,
                                 "whether to collect analysis/decode data")
 
@@ -51,13 +51,13 @@ def save_flags(flags):
 
     lines = []
 
-    # 現在時刻の記録
+    # Record current time
     time_str = dt.now().strftime('# %Y-%m-%d %H:%M')
     lines.append(time_str + "\n")
 
     for key in sorted(dic.keys()):
         if key in ignore_keys:
-            # "helpfull"などのキーは無視しないといけない
+            # Keys like "helpfull" are ignored
             continue
 
         if hasattr(dic[key], "value"):

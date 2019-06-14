@@ -27,9 +27,9 @@ def load_checkpoints(sess):
 
     checkpoint = tf.train.get_checkpoint_state(checkpoint_dir)
     if checkpoint and checkpoint.model_checkpoint_path:
-        # checkpointからロード
+        # load from checkpoint.
         saver.restore(sess, checkpoint.model_checkpoint_path)
-        # ファイル名から保存時のstep数を復元
+        # Retrieve step count from the file name.
         tokens = checkpoint.model_checkpoint_path.split("-")
         step = int(tokens[1])
         print("Loaded checkpoint: {0}, step={1}".format(
@@ -60,7 +60,7 @@ def save_figure(data,
                 range_y=None,
                 ylabel=None,
                 title=None):
-    # 最初の2ステップはまだRNNが安定しておらず極端な値を出すので飛ばす
+    # Skip first 2steps, to wait until RNN becomes stable.
     initial_skip_timesteps = 2
 
     plt.figure()
@@ -68,13 +68,13 @@ def save_figure(data,
         # When specifying y range, apply like range_y=[0.0,1.0]
         plt.ylim(range_y)
 
-    dim = data.shape[1]  # 次元数
+    dim = data.shape[1]  # dimension size
     for i in range(dim):
         v = data[initial_skip_timesteps:, i]
         label = "z{}".format(i)
         plt.plot(v, label=label)
 
-    # レジェンドの表示
+    # Show legend
     plt.legend(
         bbox_to_anchor=(1.005, 1),
         loc='upper left',
@@ -94,36 +94,36 @@ def save_figure(data,
 
 
 def train(sess, trainer, saver, summary_writer, start_step):
-    # コマンドライン引数を保存しておく
+    # Save command line args
     options.save_flags(flags)
 
     for i in range(start_step, flags.steps):
-        # 学習
+        # Train
         trainer.train(
             sess, summary_writer, batch_size=flags.batch_size, step=i)
 
         if i % flags.save_interval == flags.save_interval - 1:
-            # 保存
+            # Saev
             save_checkponts(sess, saver, i)
 
         if i % flags.generate_interval == flags.generate_interval - 1:
-            # 生成の確認
+            # Confirm generation
             generate(sess, trainer, summary_writer, step=i)
 
         if i % flags.predict_interval == flags.predict_interval - 1:
-            # 予測誤差の確認
+            # Confirm prediction error
             predict(sess, trainer)
-            # 時系列入力後の予測精度の確認
+            # Confirm prediction after the time series input
             forecast(sess, trainer)
 
         if i % flags.test_interval == flags.test_interval - 1:
-            # テスト
+            # Test
             trainer.test(
                 sess, summary_writer, batch_size=flags.batch_size, step=i)
 
 
 def generate(sess, trainer, summary_writer=None, step=None):
-    """ 時系列画像データの生成. """
+    """ Generate time series image data. """
     print("generate data")
 
     image_dir = flags.save_dir + "/generated"
@@ -143,7 +143,7 @@ def generate(sess, trainer, summary_writer=None, step=None):
 
 
 def predict_sub(sess, trainer, data_index, off_forecast):
-    """ 予測誤差の確認. """
+    """ Confirm prediction error. """
     print("predict data")
 
     if off_forecast:
@@ -196,7 +196,7 @@ def predict_sub(sess, trainer, data_index, off_forecast):
             title="Prior variance: Layer{}".format(i))
 
         if i == 0:
-            # 入力画像と再構成画像の表示
+            # Show input images and reconstruction images.
             dec_out_i = dec_outs[i]
             seq_length = inputs[0].shape[0]
             for j in range(seq_length):
@@ -205,7 +205,7 @@ def predict_sub(sess, trainer, data_index, off_forecast):
                 img = np.hstack([img_data, img_pred])
                 imsave(image_dir + "/img{0:0>2}.png".format(j), img)
 
-    # 連結したオリジナルを保存しておく
+    # Save original images by concatenating.
     org_concated = utils.concat_images(inputs[0])
     imsave(image_dir + "/org_concated_{0:0>2}.png".format(data_index),
            org_concated)
@@ -233,7 +233,7 @@ def calc_graph_ranges(values):
     ranges = []
 
     for i in range(layer_size):
-        # 時系列の0時刻目は値が大きくずれるのでレンジから外す
+        # Skip first timestep because it goes off a lot
         layer_values = values[:, i, 1:]
         max_value = np.max(layer_values)
         min_value = np.min(layer_values)
@@ -252,7 +252,7 @@ def forecast_sub(sess, trainer, data_index):
 
     seq_length = len(original_images)
 
-    # 画像を連結する
+    # Concatenate images
     original_concated_before = utils.concat_images(
         original_images[0:seq_length // 2])
     original_concated_after = utils.concat_images(
@@ -268,14 +268,14 @@ def forecast_sub(sess, trainer, data_index):
 
 
 def forecast(sess, trainer):
-    # 最初の10フレームを入れてその後10フレームをgenerateして予測する
+    # Input first 10 frames and forecast successive 10 frames.
     print("forecast data")
     forecast_sub(sess, trainer, 2)
     forecast_sub(sess, trainer, 3)
 
 
 def visualize_weights(sess, model):
-    """ Conv weightの可視化. """
+    """ Visualize conv weight. """
 
     conv_w = model.get_conv_weight()
     w = sess.run(conv_w)
@@ -305,7 +305,7 @@ def visualize_weights(sess, model):
 
 
 def evaluate_forecast(sess, trainer):
-    """ 予測性能の定量評価を行う """
+    """ Evaluate prediction. """
 
     print("evaluate forecast")
 
@@ -407,22 +407,22 @@ def main(argv):
     saver, start_step = load_checkpoints(sess)
 
     if flags.training:
-        # 学習
+        # Train
         train(sess, trainer, saver, summary_writer, start_step)
     else:
-        # 生成
+        # Generate
         generate(sess, trainer)
 
-    # 予測誤差の確認
+    # Confirm prediction error
     predict_all(sess, trainer)
 
-    # 最初の10フレームを入れた後に次の10フレームをgenerateする
+    # Input first 10 frames and generate successive 10 frames.
     forecast(sess, trainer)
 
-    # foracast性能の定量評価
+    # Evaluate forecast ability
     evaluate_forecast(sess, trainer)
 
-    # weightの可視化
+    # Visualize weight
     visualize_weights(sess, train_model)
 
 

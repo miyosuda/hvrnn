@@ -47,10 +47,10 @@ class DataManager(object):
         return self.convert_images(images)
 
     def get_off_forecast_test_data(self, data_index):
-        """ 予測が途中で外れるような時系列画像データ """
+        """ Image time seris data to cause prediction error """
         index0 = data_index * 2
         index1 = data_index * 2 + 1
-        # 0~9と10~19で、違うシーケンスから取ってきて合わせている
+        # Get 0~9 and 10~19 from different sequences.
         data0 = self.raw_test_images[index0, 0:self.seq_length // 2, :, :]
         data1 = self.raw_test_images[index1, self.seq_length // 2:, :, :]
         images = np.concatenate([data0, data1], axis=0)
@@ -64,7 +64,7 @@ class DataManager(object):
         return converted_images
 
     def split_train_test_data(self, data, train_data_size):
-        # 引数のデータをtrain, testに分割する
+        # Split data into train/test.
         train_data = data[0:train_data_size]
         test_data = data[train_data_size:]
         return train_data, test_data
@@ -90,24 +90,23 @@ class MnistDataManager(DataManager):
         total_data_size, self.seq_length, self.w, self.h = data_images.shape
         self.train_data_size = 9000
         self.test_data_size = 5000
-        # テストデータは5000個しか利用しないが、実際には5000個ある
-        # (リッジ回帰でのデータ作成用に利用する為多く用意している)
+        # Test data is used only 500, but created 5000.
+        # (For the regression analyze, test data is prepared larger)
         self.using_test_data_size = 500
 
-        # 画像データ (uint8)
+        # Image data (uint8)
         self.raw_train_images = data_images[
             0:self.train_data_size, :, :, :]  # (9000, 20, 64, 64)
         self.raw_test_images = data_images[
             self.train_data_size:, :, :, :]  # (5000, 20, 64, 64)
 
-        # ラベル、位置、速度、Bounce は現在数字は1個にしか対応していない
         # ラベル
         train_labels = data_labels[0:self.train_data_size].reshape(
             [self.train_data_size])
         test_labels = data_labels[self.train_data_size:].reshape(
             [self.test_data_size])
 
-        # 位置
+        # Positions.
         train_pos_xs = data_pos_xs[0:self.train_data_size].reshape(
             [self.train_data_size, self.seq_length])
         test_pos_xs = data_pos_xs[self.train_data_size:].reshape(
@@ -118,7 +117,7 @@ class MnistDataManager(DataManager):
         test_pos_ys = data_pos_ys[self.train_data_size:].reshape(
             [self.test_data_size, self.seq_length])
 
-        # 速度
+        # Speed
         train_speeds = data_speeds[0:self.train_data_size].reshape(
             [self.train_data_size])
         test_speeds = data_speeds[self.train_data_size:].reshape(

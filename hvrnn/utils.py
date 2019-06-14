@@ -7,7 +7,7 @@ import numpy as np
 
 
 def concat_images(images):
-    """ 画像を横方向にスペース付きで連結する """
+    """ Concatenate images horizontally with spacing """
     spacer = np.ones([64, 1], dtype=np.float32)
     images_with_spacers = []
 
@@ -16,14 +16,14 @@ def concat_images(images):
     for i in range(image_size):
         images_with_spacers.append(images[i])
         if i != image_size - 1:
-            # 1ピクセルのスペースを空ける
+            # Add one pixel spacing.
             images_with_spacers.append(spacer)
     ret = np.hstack(images_with_spacers)
     return ret
 
 
 def concat_images_in_rows(images, row_size):
-    """ 画像を縦横方向にスペース付きで連結する """
+    """ Concatenate images horizontally and vertically with spacing """
     column_size = len(images) // row_size
     spacer_h = np.ones(
         [1, 64 * column_size + column_size - 1], dtype=np.float32)
@@ -44,11 +44,11 @@ def concat_images_in_rows(images, row_size):
 
 def add_noise(images, noise_type="zero_mask"):
     if noise_type == "zero_mask":
-        # ゼロマスクタイプのノイズを加える場合
+        # Add zero mask type noise
         ratio = 0.2
         return images * (np.random.random_sample(images.shape) > ratio)
     else:
-        # Salt and pepper noiseを加える場合
+        # Add salt and pepper noise
         rate = 0.1
         drop = np.random.uniform(0.0, 1.0, images.shape)
         z = np.where(drop < 0.5 * rate)

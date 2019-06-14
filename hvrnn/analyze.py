@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+# 
+# Calculate correlation coefficient and decoding accuracy.
+# (Note: correlation coefficient between the label factor and z or h is not adequate,
+# so mutual information (mi.py) should be used instead.)
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -26,9 +30,8 @@ from trainer import Trainer
 from model import VRNN
 import options
 
-# ラベルといった離散値のファクターも算出する場合Trueに
-# (離散値のclassificationはSVMを使っているのでDiscrete値のみ時間がかかるので)
-# スキップする場合はFalseに
+# Descretized values like label takes long time to decode (because they use
+# SVM for classification), so set 'analyze_discrete' False for skipping.
 analyze_discrete = True
 
 flags = options.get_options()
@@ -40,7 +43,7 @@ def load_checkpoints(sess):
 
     checkpoint = tf.train.get_checkpoint_state(checkpoint_dir)
     if checkpoint and checkpoint.model_checkpoint_path:
-        # checkpointからロード
+        # Load from checkpoint.
         saver.restore(sess, checkpoint.model_checkpoint_path)
         print("Loaded checkpoint: {0}".format(
             checkpoint.model_checkpoint_path))
@@ -91,38 +94,38 @@ def save_corr_figure(data, title_name, param_name, layer_index):
 
 
 def save_grid_corr_figure(datas, param_names, layer_index):
-    # 相関係数のグリッド表示
+    # Grid display for the correlation coefficient.
     plt.figure()
 
     datas = np.array(datas)
 
-    # 出力サイズを640x240に
+    # Make output size 640x240
     fig, ax = plt.subplots(figsize=(6.4, 2.4))
 
-    # カラーバーの縦のサイズをヒートマップに合わせる
+    # Fit vertical size of the color bar as that of the heatmap.
     divider = make_axes_locatable(ax)
     ax_cb = divider.new_horizontal(size="2%", pad=0.05)
 
     fig.add_axes(ax_cb)
 
-    # ヒートマップの表示
+    # Show heatmap
     im = ax.imshow(datas)
 
-    # カラーバー作成
+    # Make colorbar.
     cbar = ax.figure.colorbar(im, cax=ax_cb)
 
-    # Y軸のラベル表示
+    # Show Y axis label.
     ax.set_yticks(np.arange(datas.shape[0]))
     ax.set_yticklabels(param_names)
 
-    # X軸の削除
+    # Remove x axis
     ax.tick_params(labelbottom=False, bottom=False)
     ax.set_xticklabels([])
 
-    # X軸ラベルの表示
+    # Show X axis label.
     ax.set_xlabel("Z")
 
-    # タイトルの表示
+    # Show title.
     ax.set_title("Correlation: Layer{}".format(layer_index))
 
     file_name = "corr_grid_{}.png".format(layer_index)
@@ -132,7 +135,7 @@ def save_grid_corr_figure(datas, param_names, layer_index):
 
 
 def split_train_test_data(data, train_data_size):
-    # 引数のデータをtrain, testに分割する
+    # Split data for train and test.
     train_data = data[0:train_data_size]
     test_data = data[train_data_size:]
     return train_data, test_data
@@ -172,7 +175,7 @@ def analyze_continuous_single_value(layer_index, train_xs, train_value,
                                     test_xs, test_value):
     seq_length = train_xs.shape[2]
 
-    # target値をシーケンスステップ分繰り返して、数を揃える
+    # repeat taregt values to sequence step size to align size.
     train_values = np.repeat(train_value, seq_length)  # (800*7)
     test_values = np.repeat(test_value, seq_length)
 
@@ -194,13 +197,13 @@ def analyze_discrete_timeseries_value(layer_index, train_xs, train_values,
     test_x = test_x.reshape([-1, test_x_shape[2]])  # (15000, 16)
     test_y = test_values.reshape([-1])
 
-    # RBFカーネルを使ったSVM
+    # SVM with RBF kernel.
     #C      = 1.0
     #kernel = 'rbf'
     #gamma  = 0.01
     #clf = SVC(C=C, kernel=kernel, gamma=gamma)
 
-    # LinearSVNを使った場合
+    # For Linear SVN
     #clf = LinearSVC(multi_class='ovr',
     #                penalty='l2',
     #                loss='hinge',
@@ -251,7 +254,8 @@ def save_analysis_result(**kwargs):
 
 
 def analyze_timeseries_values_corr(layer_index, test_xs, test_values):
-    # 時系列に値を持つファクターとzの相関係数を求める
+    # Calculate correlation coefficient between z and the factor that changes along
+    # time time serirs.
     test_x = test_xs[layer_index]
     test_x_shape = test_x.shape
     latent_size = test_x_shape[2]
@@ -267,7 +271,8 @@ def analyze_timeseries_values_corr(layer_index, test_xs, test_values):
 
 
 def analyze_single_value_corr(layer_index, test_xs, test_value):
-    # 時系列に対してひとつの値を持つファクターとzの相関係数を求める
+    # Calculate correlation coefficient between z and the factor that does not change
+    # during the
     test_x = test_xs[layer_index]
     test_x_shape = test_x.shape
     latent_size = test_x_shape[2]
@@ -303,11 +308,11 @@ def analyze_face(data_manager):
     pan_alpha = test_analysis_data["pan_alpha"]  # (1000,)
     roll_alpha = test_analysis_data["roll_alpha"]  # (1000,)
 
-    # 値を正規化しておく
+    # Normalize vlues
     pan = pan % (2.0 * np.pi)
     roll = roll % (2.0 * np.pi)
 
-    # 開始フレームと終了フレームを指定した場合
+    # Set start and end frame.
     start_frame = 2
     end_frame = 4
 
@@ -318,7 +323,7 @@ def analyze_face(data_manager):
 
     sample_size = z.shape[1]  # 1000
 
-    # 元のテストデータをさらに線形回帰の学習学習データとテストデータに分ける
+    # Split original data into train and test.
     test_data_size = sample_size // 5  # 200
     train_data_size = sample_size - test_data_size  # 800
 
@@ -337,7 +342,7 @@ def analyze_face(data_manager):
     #(800,n) (200,n)
     #(800,) (200,)
 
-    # 相関係数の算出
+    # Calculate correlation coefficient
     for i in range(layer_size):
         corr_pan = analyze_timeseries_values_corr(i, test_z, test_pan)
         corr_roll = analyze_timeseries_values_corr(i, test_z, test_roll)
@@ -349,7 +354,7 @@ def analyze_face(data_manager):
         save_corr_figure(corr_pan_alpha, "Pan Alpha", "roll_alpha", i)
         save_corr_figure(corr_roll_alpha, "Roll Alpha", "pan_alpha", i)
 
-    # デコード精度の算出
+    # Calculate decoding accuracies.
     z_accs_pan = []
     z_accs_roll = []
     z_accs_pan_alpha = []
@@ -361,7 +366,7 @@ def analyze_face(data_manager):
     h_accs_roll_alpha = []
 
     for i in range(layer_size):
-        # zからのデコード
+        # Decode from z
         z_acc_pan = analyze_continuous_timeseries_values(
             i, train_z, train_pan, test_z, test_pan)
         z_acc_roll = analyze_continuous_timeseries_values(
@@ -372,7 +377,7 @@ def analyze_face(data_manager):
         z_acc_roll_alpha = analyze_continuous_single_value(
             i, train_z, train_roll_alpha, test_z, test_roll_alpha)
 
-        # hからのデコード
+        # Decode from h
         h_acc_pan = analyze_continuous_timeseries_values(
             i, train_h, train_pan, test_h, test_pan)
         h_acc_roll = analyze_continuous_timeseries_values(
@@ -431,7 +436,7 @@ def analyze_face(data_manager):
     print("[Roll Alpha (h)]")
     print(h_accs_roll_alpha)
 
-    # 結果をファイルに保存
+    # Save result to file
     save_analysis_result(
         z_pan=z_accs_pan,
         z_roll=z_accs_roll,
@@ -465,7 +470,7 @@ def analyze_mnist(data_manager):
     bounce_x = test_analysis_data["bounce_x"]  # (5000,)
     bounce_y = test_analysis_data["bounce_y"]  # (5000,)
 
-    # 開始フレームと終了フレームを指定した場合
+    # Set start and end frame
     start_frame = 5
     end_frame = 20
 
@@ -478,7 +483,7 @@ def analyze_mnist(data_manager):
 
     sample_size = z.shape[1]  # 5000
 
-    # 元のテストデータをさらに線形回帰の学習学習データとテストデータに分ける
+    # Split original data into train and test.
     test_data_size = sample_size // 5  # 1000
     train_data_size = sample_size - test_data_size  # 4000
 
@@ -499,8 +504,9 @@ def analyze_mnist(data_manager):
     #(4000,n) (1000,n)
     #(4000,) (1000,)
 
-    # 相関係数の算出
+    # Calculate correlation coefficient
     for i in range(layer_size):
+        # correlation with z
         z_corr_pos_x = analyze_timeseries_values_corr(i, test_z, test_pos_x)
         z_corr_pos_y = analyze_timeseries_values_corr(i, test_z, test_pos_y)
         z_corr_label = analyze_single_value_corr(i, test_z, test_label)
@@ -517,13 +523,13 @@ def analyze_mnist(data_manager):
         save_corr_figure(z_corr_bounce_x, "Bounce X", "z_bounce_x", i)
         save_corr_figure(z_corr_bounce_y, "Bounce Y", "z_bounce_y", i)
 
-        # 相関係数のGrid表示
+        # Show correlation coefficient as grid.
         save_grid_corr_figure([
             z_corr_pos_x, z_corr_pos_y, z_corr_label, z_corr_speed,
             z_corr_bounce_x, z_corr_bounce_y
         ], ["Pos X", "Pos Y", "Label", "Speed", "Bounce X", "Bounce Y"], i)
 
-        # hとの相関係数
+        # Correlation with h
         h_corr_pos_x = analyze_timeseries_values_corr(i, test_h, test_pos_x)
         h_corr_pos_y = analyze_timeseries_values_corr(i, test_h, test_pos_y)
         h_corr_label = analyze_single_value_corr(i, test_h, test_label)
@@ -540,7 +546,7 @@ def analyze_mnist(data_manager):
         save_corr_figure(h_corr_bounce_x, "Bounce X", "h_bounce_x", i)
         save_corr_figure(h_corr_bounce_y, "Bounce Y", "h_bounce_y", i)
 
-    # デコード精度の算出
+    # Calculate decoding accuracies
     z_accs_pos_x = []
     z_accs_pos_y = []
     z_accs_speed = []
@@ -657,7 +663,7 @@ def analyze_mnist(data_manager):
         print("[Bounce Y (h)]")
         print(h_accs_bounce_y)
 
-    # 結果をファイルに保存
+    # Save result to file
     if analyze_discrete:
         save_analysis_result(
             z_pos_x=z_accs_pos_x,
@@ -705,7 +711,7 @@ def analyze_bsprite(data_manager):
     bounce_x = test_analysis_data["bounce_x"]  # (5000,)
     bounce_y = test_analysis_data["bounce_y"]  # (5000,)
 
-    # 開始フレームと終了フレームを指定した場合
+    # Set start and end frame
     start_frame = 5
     end_frame = 20
 
@@ -718,7 +724,7 @@ def analyze_bsprite(data_manager):
 
     sample_size = z.shape[1]  # 5000
 
-    # 元のテストデータをさらに線形回帰の学習学習データとテストデータに分ける
+    # Split original data into train and test.
     test_data_size = sample_size // 5  # 1000
     train_data_size = sample_size - test_data_size  # 4000
 
@@ -739,9 +745,9 @@ def analyze_bsprite(data_manager):
     #(4000,n) (1000,n)
     #(4000,) (1000,)
 
-    # 相関係数の算出
+    # Calculate correlation coefficient
     for i in range(layer_size):
-        # zとの相関係数
+        # correlation with z
         z_corr_pos_x = analyze_timeseries_values_corr(i, test_z, test_pos_x)
         z_corr_pos_y = analyze_timeseries_values_corr(i, test_z, test_pos_y)
         z_corr_label = analyze_single_value_corr(i, test_z, test_label)
@@ -758,13 +764,13 @@ def analyze_bsprite(data_manager):
         save_corr_figure(z_corr_bounce_x, "Bounce X", "z_bounce_x", i)
         save_corr_figure(z_corr_bounce_y, "Bounce Y", "z_bounce_y", i)
 
-        # 相関係数のGrid表示
+        # Show correlation coefficient as grid.
         save_grid_corr_figure([
             z_corr_pos_x, z_corr_pos_y, z_corr_label, z_corr_speed,
             z_corr_bounce_x, z_corr_bounce_y
         ], ["Pos X", "Pos Y", "Label", "Speed", "Bounce X", "Bounce Y"], i)
 
-        # hとの相関係数
+        # Correlation with h
         h_corr_pos_x = analyze_timeseries_values_corr(i, test_h, test_pos_x)
         h_corr_pos_y = analyze_timeseries_values_corr(i, test_h, test_pos_y)
         h_corr_label = analyze_single_value_corr(i, test_h, test_label)
@@ -781,7 +787,7 @@ def analyze_bsprite(data_manager):
         save_corr_figure(h_corr_bounce_x, "Bounce X", "h_bounce_x", i)
         save_corr_figure(h_corr_bounce_y, "Bounce Y", "h_bounce_y", i)
 
-    # デコード精度の算出
+    # Calculate decoding accuracies
     z_accs_pos_x = []
     z_accs_pos_y = []
     z_accs_speed = []
@@ -898,7 +904,7 @@ def analyze_bsprite(data_manager):
         print("[Bounce Y (h)]")
         print(h_accs_bounce_y)
 
-    # 結果をファイルに保存
+    # Save result to file
     if analyze_discrete:
         save_analysis_result(
             z_pos_x=z_accs_pos_x,
@@ -943,7 +949,7 @@ def analyze_oculomotor(data_manager):
     angle_x  = test_analysis_data["angle_x"]  # (500, 20)
     angle_y  = test_analysis_data["angle_y"]  # (500, 20)
 
-    # 開始フレームと終了フレームを指定した場合
+    # Set start and end frame
     start_frame = 5
     end_frame = 20
 
@@ -956,11 +962,11 @@ def analyze_oculomotor(data_manager):
 
     sample_size = z.shape[1]  # 500
 
-    # こちらは相関係数しか調べていないので、さらに学習データとテストデータへの分離はしていない.
+    # Here only correlation coefficient is analyzed, so there is no train/test split.
 
-    # 相関係数の算出
+    # Calcuate correlation coefficient.
     for i in range(layer_size):
-        # zとの相関係数
+        # Correlation with z
         z_corr_action_x = analyze_timeseries_values_corr(i, z, action_x)
         z_corr_action_y = analyze_timeseries_values_corr(i, z, action_y)
         z_corr_angle_x  = analyze_timeseries_values_corr(i, z, angle_x)
@@ -971,7 +977,7 @@ def analyze_oculomotor(data_manager):
         save_corr_figure(z_corr_angle_x,  "Angle X",  "z_angle_x", i)
         save_corr_figure(z_corr_angle_y,  "Angle Y",  "z_angle_y", i)
 
-        # 相関係数のGrid表示
+        # Show correlation coefficient as grid.
         save_grid_corr_figure([
             z_corr_action_x,
             z_corr_action_y,
@@ -979,7 +985,7 @@ def analyze_oculomotor(data_manager):
             z_corr_angle_y
         ], ["Action X", "Action Y", "Angle X", "Angle Y"], i)
 
-        # hとの相関係数
+        # Correlation with h
         h_corr_action_x = analyze_timeseries_values_corr(i, h, action_x)
         h_corr_action_y = analyze_timeseries_values_corr(i, h, action_y)
         h_corr_angle_x  = analyze_timeseries_values_corr(i, h, angle_x)
@@ -993,7 +999,7 @@ def analyze_oculomotor(data_manager):
     
 
 def collect_data(data_manager):
-    """ 分析用データを集める """
+    """ Collect analysis data """
     print("collecting data")
     dataset_type    = flags.dataset_type
     layer_size      = flags.layer_size
@@ -1030,21 +1036,21 @@ def collect_data(data_manager):
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
 
-    # 回帰分析用のデータを集める
+    # Collect data for regression analysis
     data_size = data_manager.test_data_size
 
-    # ウェイトを初期化する
+    # Initialize weight
     sess.run(tf.global_variables_initializer())
 
-    # ウェイトデータのロード
+    # Load weight data
     load_checkpoints(sess)
 
-    # 学習後のデータを集める
+    # Collect trained data.
     zses, hses = trainer.collect_analysis_data(sess, layer_size, data_size)
 
     file_path = flags.save_dir + "/analysis_data"
 
-    # 圧縮して保存
+    # Compress and save.
     np.savez_compressed(file_path, z=zses, h=hses)
 
 

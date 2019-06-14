@@ -37,11 +37,11 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
                  reuse):
 
         self.layer_size      = layer_size
-        self.n_h             = h_dim  # hiddenの次元
-        self.n_z             = z_dim  # zの次元
+        self.n_h             = h_dim  # hidden dim
+        self.n_z             = z_dim  # z dim
 
         self.downward_type   = downward_type
-        self.no_td_bp        = no_td_bp  # Top-Down信号に対するBPをしないかどうか
+        self.no_td_bp        = no_td_bp  # Whether to use back-prop for Top-Down signal.
         self.filter_size     = filter_size
         self.for_generating  = for_generating
         self.binalize_output = binalize_output
@@ -54,20 +54,20 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
 
     @property
     def state_size(self):
-        # zero_state()から呼ばれる
+        # Called from zero_state()
         return [self.n_h] * self.layer_size
 
     @property
     def output_size(self):
-        # static_rnnを自前で実装した場合最終的には使われない
+        # Not used when impelementing static_rnn by myself.
         return self.n_h
 
     def process_downward_h_join(self, h0, h1, layer_index):
-        # 下方向に来た流れをどう合流するか
-        # 上の階層のhとconcatする
+        # How to join downward stream.
+        # Concatenate with upper layes's h
         with tf.variable_scope("downward_h_join" + str(layer_index)):
             if self.downward_type == "concat":
-                # Concatして、fcでサイズを揃える場合
+                # Cacatenate and align size with FC
                 h_c = tf.concat(axis=1, values=(h0, h1))
                 h = tf.layers.dense(
                     h_c,
@@ -75,24 +75,23 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
                     activation=tf.nn.relu,
                     name="fc1")
             elif self.downward_type == "gated_add":
-                # gate addする場合
+                # Gate add
                 gate = tf.get_variable(
                     "gate",
                     shape=h1.get_shape()[1:],
                     initializer=tf.constant_initializer(0.1))
                 h = h0 + tf.multiply(gate, h1)
             elif self.downward_type == "add":
-                # 加算する場合
+                # Adding
                 h = h0 + h1
         return h
 
-    # (ここは各階層同じ)
     def process_prior(self, h, layer_index):
-        # hから事前分布を計算する
+        # Calculate prior from h
         with tf.variable_scope("prior" + str(layer_index)):
             prior_hidden = tf.layers.dense(
                 h,
-                self.n_h,  # hiddenのサイズと同じにしている
+                self.n_h,  # same size as hidden
                 activation=tf.nn.relu,
                 name="fc1")
             prior_mu = tf.layers.dense(
@@ -102,11 +101,11 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
         return prior_mu, prior_log_sigma_sq
 
     def process_phi_x_conv(self, x, layer_index):
-        """ 入力xをzとconcatしてhにリカレントする為にxの次元を変える為の層 """
+        """ Precess input x before cancatenating h or z_1. (conv version)"""
 
-        # 入力xをx_1に
+        # Change x into x_1
         with tf.variable_scope("phi_x" + str(layer_index)):
-            # flatになっているので直す
+            # Retrieve from flatten state
             if layer_index == 0:
                 x = tf.reshape(x, [-1, 64, 64, 1])
                 # (-1, 64, 64, 1)
@@ -133,7 +132,7 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
                 name="conv2")
             # (-1, 16, 16, filter_size) or (-1, 4, 4, filter_size)
 
-            # 上にあげる為のものをとっておく
+            # Store to send to upper layer.
             h2_flat = tf.layers.flatten(h2)
 
             fc_input = h2_flat
@@ -147,7 +146,7 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
         return x_1, h2_flat
 
     def process_phi_x_fc(self, x, layer_index):
-        """ 入力xをzとconcatしてhにリカレントする為にxの次元を変える為の層 """
+        """ Precess input x before cancatenating h or z_1. (FC version)"""
 
         # 入力xをx_1に
         with tf.variable_scope("phi_x" + str(layer_index)):
@@ -172,38 +171,36 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
 
     # (ここは各階層で異なる)
     def process_phi_x(self, x, layer_index):
-        """ 入力xをzとconcatしてhにリカレントする為にxの次元を変える為の層 """
+        """ Precess input x before cancatenating h or z_1."""
         if layer_index < 2:
             return self.process_phi_x_conv(x, layer_index)
         else:
             return self.process_phi_x_fc(x, layer_index)
 
-    # (ここは各階層同じ)
     def process_encoder(self, x_1, h, layer_index):
-        # x_1とhをconcatし、Encode
+        # Concatenate x_1 and h and encode.
         with tf.variable_scope("encoder" + str(layer_index)):
-            # x_1とhをconcat
+            # Concatenate x_1 and h
             enc_input = tf.concat(axis=1, values=(x_1, h))
-            # FC層をいれて256に
+            # Add FC layer and make it into 256
             h1 = tf.layers.dense(
                 enc_input,
                 self.n_h,  # hiddenのサイズと同じにした
                 activation=tf.nn.relu,
                 name="fc1")
 
-            # muとsigmaに分岐
+            # Split into mu and sigma
             enc_mu = tf.layers.dense(h1, self.n_z, name="mu")
             enc_log_sigma_sq = tf.layers.dense(
                 h1, self.n_z, name="sigma")
 
-        # 学習時はzを事後分布からサンプリング
+        # Sample from posterior
         z = sample_gauss(enc_mu, enc_log_sigma_sq)
         return z, enc_mu, enc_log_sigma_sq
 
-    # (ここは各階層同じ)
     def process_phi_z(self, z, layer_index):
-        """ zをxとconcatしてhにリカレントする為にzの次元を変える為の層 """
-        # zからFCでz_1に
+        """ Process z before decoding and concatenating with x_1 for recurrent process. """
+        # convert z to z_1 with FC
         with tf.variable_scope("phi_z" + str(layer_index)):
             z_1 = tf.layers.dense(
                 z,
@@ -213,13 +210,13 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
         return z_1
 
     def process_decoder_deconv(self, z_1, h, layer_index):
-        # zとhで、Decode
+        # Decode with z_1 and h
         with tf.variable_scope("decoder" + str(layer_index)):
-            # z_1とhをconcatした後のものに対して、deconvしていく
+            # Concatenate z_1 and h and after that use deconvs.
             dec_input = tf.concat(axis=1, values=(z_1, h))  # (-1, 512)
 
             if layer_index == 0:
-                # FC層 (deconvのinputサイズに合わせるため)
+                # FC layer (in order to align with deconv input size)
                 h0 = tf.layers.dense(
                     dec_input,
                     self.filter_size * 4 * 4,
@@ -256,13 +253,13 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
                     kernel_size=[4, 4],
                     strides=(2, 2),
                     padding="same",
-                    activation=None,  # Activationは最後通していない
+                    activation=None,  # No acivation.
                     name="deconv4")  # (-1, 64, 64, 1)
-                # flat化しておく
+                # Flatten
                 dec_out_raw = tf.reshape(h4, [-1, 64 * 64 * 1])
                 return dec_out_raw
             elif layer_index == 1:
-                # FC層 (deconvのinputサイズに合わせるため)
+                # FC layer (in order to align with deconv input size)
                 h0 = tf.layers.dense(
                     dec_input,
                     self.filter_size * 4 * 4,
@@ -284,19 +281,19 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
                     kernel_size=[4, 4],
                     strides=(2, 2),
                     padding="same",
-                    activation=tf.nn.relu,  # Activation通している
+                    activation=tf.nn.relu,  # Use Activation
                     name="deconv2")
                 # (-1, 16, 16, filter_size)
-                # flat化しておく
+                # Flatten
                 h2_shape = h2.get_shape()
                 dec_out_raw = tf.reshape(
                     h2, [-1, h2_shape[1] * h2_shape[2] * h2_shape[3]])
                 return dec_out_raw
 
     def process_decoder_fc(self, z_1, h, output_dim, layer_index):
-        # zとhで、Decode
+        # Decode with z_1 and h
         with tf.variable_scope("decoder" + str(layer_index)):
-            # z_1とhをconcatした後のものに対して、fcする
+            # Concatenate z_1 and h and after that use FC
             dec_input = tf.concat(axis=1, values=(z_1, h))  # (-1, 512)
 
             h1 = tf.layers.dense(
@@ -309,24 +306,23 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
                 self.n_h,  # hiddenのサイズと同じにした
                 activation=tf.nn.relu,
                 name="fc2")
-            # 下から上がってきたx_upと同じ次元に
+            # Make the dimension same as x_up received from lower layer.
             dec_out_raw = tf.layers.dense(
                 h2,
                 output_dim,
                 name="fc3",
-                activation=tf.nn.relu)  # Activation入れている
+                activation=tf.nn.relu)  # Use activation.
         return dec_out_raw
 
-    # (ここは各階層異なる)
     def process_decoder(self, z_1, h, output_dim, layer_index):
-        # zとhで、Decode
+        # Decode with z and h
         if layer_index < 2:
             return self.process_decoder_deconv(z_1, h, layer_index)
         else:
             return self.process_decoder_fc(z_1, h, output_dim, layer_index)
 
     def calc_upward_x(self, param):
-        # 上行フローはバックプロパゲーションしない様に
+        # No back-propagation for upward flow.
         x_up = tf.stop_gradient(param)
         return x_up
 
@@ -345,39 +341,39 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
         with tf.variable_scope(scope or type(self).__name__, reuse=self.reuse):
             for layer_index in range(self.layer_size):
                 with tf.variable_scope("layer" + str(layer_index)):
-                    # 同階層の前時刻のrnn hidden
+                    # Hidden state from last time stop and same hierarchical layer.
                     h0 = state[layer_index]
                     # h0=(-1, 256)
 
                     if layer_index != self.layer_size - 1:
-                        # 最上位階層以外
-                        # 一つ上の階層のrnn hidden
+                        # Except for the top layer.
+                        # Upper layer's hidden state.
                         h1 = state[layer_index + 1]
 
                         if self.no_td_bp:
-                            # Top-Down信号に対するBack propagationをしないようにする場合
+                            # When not using back-prop for top-down signal.
                             h1 = tf.stop_gradient(h1)
 
                         if self.downward_type == "to_prior":
-                            # 上から来たhと合流させない場合
+                            # When not joining with h from the upper layer.
                             h = h0
                         else:
-                            # 上からきたhと合流させる場合
+                            # When joining with h from the uppe layer.
                             h = self.process_downward_h_join(
                                 h0, h1, layer_index)
 
                     else:
-                        # 最上位階層
+                        # For the top layer.
                         h = h0
                         h1 = h0
 
-                    # 上位階層のhiddenからZの事前分布を作成
+                    # Create z prior.
                     if self.downward_type == "to_prior":
-                        # 上の階層の情報から事前分布を求める場合
+                        # When creating prior from upper layer h.
                         prior_mu, prior_log_sigma_sq = self.process_prior(
                             h1, layer_index)
                     else:
-                        # 同じ階層のhから事前分布を求める場合
+                        # When creating prior from the same layer h.
                         prior_mu, prior_log_sigma_sq = self.process_prior(
                             h, layer_index)
 
@@ -385,33 +381,33 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
                     prior_log_sigma_sqs.append(prior_log_sigma_sq)
 
                     if not self.for_generating:
-                        # 学習時
+                        # When training.
 
                         if layer_index == 0:
-                            # 最下位階層は入力がx
+                            # For top layer input is x.
                             x_in = x
                         else:
-                            # ひとつ下の層から上がってきたものをxに
+                            # Set x as x_up which was sent from the lower layer.
                             x_in = x_up
 
                         inputs.append(x_in)
-                        # decoder用にinputの次元を記録しておく
+                        # Stoer input dimension for the decoder
                         output_dim = x_in.get_shape()[1]
 
                         x_1, x_1_raw = self.process_phi_x(x_in, layer_index)
                         # (-1, 256), (-1, ***)
 
-                        # 学習時はEncoderでZの事後分布を作成
+                        # Create z posteror when training.
                         z, enc_mu, enc_log_sigma_sq = self.process_encoder(
                             x_1, h, layer_index)
                         enc_mus.append(enc_mu)
                         enc_log_sigma_sqs.append(enc_log_sigma_sq)
 
-                        # 上にあげる情報
+                        # Information to send to upper layer.
                         x_up = self.calc_upward_x(x_1_raw)
 
                     else:
-                        # 生成時は事前分布からZをサンプリング
+                        # Sampling from the prior when generating.
                         z = sample_gauss(prior_mu, prior_log_sigma_sq)
                         if layer_index == 0:
                             output_dim = 64 * 64 * 1
@@ -426,7 +422,7 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
 
                     z_1 = self.process_phi_z(z, layer_index)
 
-                    # Decoder処理
+                    # Decoder process
                     dec_out_raw = self.process_decoder(z_1, h, output_dim,
                                                        layer_index)
                     # (-1, 64*64*1) or
@@ -434,27 +430,27 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
                     dec_out_raws.append(dec_out_raw)
 
                     if self.for_generating:
-                        # 生成時は出力したxからリカレント入力用のxを作成する
+                        # When generating, create x_1 for recurrent process from generated X.
                         if layer_index == 0:
                             dec_out = tf.nn.sigmoid(dec_out_raw)
                             if self.binalize_output:
-                                # ベルヌーイ分布のサンプリングを行う (only first layer)
+                                # Sampling from Bernouli dist (only first layer)
                                 x_out = sample_bernoulli(dec_out)
                             else:
-                                # そのまま出力する
+                                # Output as it is.
                                 x_out = dec_out
                         else:
-                            # sigmoid取らずにそのまま
+                            # No sigmoid.
                             x_out = dec_out_raw
 
                         # (-1, 64*64*1)
                         x_1, _ = self.process_phi_x(x_out, layer_index)
 
                         if layer_index == 0:
-                            # 最下層のみ最終的に出力する
+                            # Only for the lowest layer.
                             x_out_0 = x_out
 
-                    # ここがリカレント部分 (RNNを利用している). リカレントのoutputは利用していない.
+                    # Recurrenet process using RNN. (Recurrent output is not used)
                     rec_input = tf.concat(axis=1, values=(x_1, z_1))
                     # rec_input=(10, 512), h=(10, 512)
                     _, state2 = self.cells[layer_index](rec_input, h)
@@ -470,7 +466,7 @@ class VariationalRNNCell(tf.contrib.rnn.RNNCell):
 
 
 class MerlinRNNCell(tf.contrib.rnn.RNNCell):
-    """Merlin style RNN cell."""
+    """MERLIN style RNN cell."""
 
     def __init__(self, layer_size, h_dim, z_dim, downward_type, no_td_bp,
                  filter_size, for_generating, binalize_output, reuse):

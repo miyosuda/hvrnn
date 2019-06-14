@@ -21,7 +21,7 @@ class Trainer(object):
         self.train_op = tf.train.AdamOptimizer(learning_rate).minimize(
             self.train_model.loss)
 
-        # Tensorboard記録用
+        # For Tensorboard recording
         self.generated_image_ph = tf.placeholder(
             tf.float32, shape=[1, 64 * 3 + 2, 64 * 10 + 9, 1])
         self.generated_image_op = tf.summary.image("generated_image",
@@ -35,12 +35,12 @@ class Trainer(object):
         batch_data = np.reshape(batch_data, [batch_size, seq_length, w * h])
 
         if self.use_denoising:
-            # ノイズを載せたもの
+            # Add noise
             input_batch_data = utils.add_noise(batch_data)
         else:
             input_batch_data = batch_data
 
-        # 毎バッチごとにstateの初期化をするので、stateの更新をしていない
+        # Not updating state because it is initialized with every batch.
         out = sess.run(
             [
                 self.train_op, self.train_model.loss,
@@ -56,12 +56,12 @@ class Trainer(object):
 
         if step % 10 == 0:
             summary_writer.add_summary(summary_str, step)
+            
         """
-        # weightの表示はしないことに
         if step % 10000 == 0:
-          # weightのヒストグラム更新
-          summary_str_infrequent = sess.run( self.train_model.summary_op_infrequent )
-          summary_writer.add_summary(summary_str_infrequent, step)
+            # Update weight histogram
+            summary_str_infrequent = sess.run( self.train_model.summary_op_infrequent )
+            summary_writer.add_summary(summary_str_infrequent, step)
         """
 
     def record_loss(self, summary_writer, tag, value, step):
@@ -85,12 +85,12 @@ class Trainer(object):
                                     [batch_size, seq_length, w * h])
 
             if self.use_denoising:
-                # ノイズを載せたもの
+                # Add noise
                 input_batch_data = utils.add_noise(batch_data)
             else:
                 input_batch_data = batch_data
-
-            # 毎バッチごとにstateの初期化をするので、stateの更新をしていない
+                
+            # Not updating state because it is initialized with every batch.
             out = sess.run(
                 [
                     self.train_model.reconstr_losses,
@@ -108,7 +108,7 @@ class Trainer(object):
         mean_reconstr_losses = np.mean(all_reconstr_losses, axis=0)
         mean_latent_losses = np.mean(all_latent_losses, axis=0)
 
-        # Summary記録
+        # Record summary
         for i in range(len(mean_reconstr_losses)):
             self.record_loss(summary_writer, "test_rconstr_loss{}".format(i),
                              mean_reconstr_losses[i], step)
@@ -120,7 +120,7 @@ class Trainer(object):
                     i, mean_reconstr_losses[i], mean_latent_losses[i]))
 
     def generate(self, sess, generate_size, summary_writer=None, step=None):
-        # Stateをリセットする
+        # Reset state
         last_state_h = sess.run(self.generate_model.initial_state_h)
 
         samples = []
@@ -142,7 +142,7 @@ class Trainer(object):
             samples.append(x)
 
         if summary_writer is not None:
-            # Tensorboardへの記録
+            # Record to Tensorboard
             concated_samples = utils.concat_images_in_rows(samples, 3)
             # (194, 649)
             concated_samples = np.reshape(concated_samples,
@@ -155,7 +155,7 @@ class Trainer(object):
         return samples
 
     def calculate_sub(self, sess, images):
-        """ 内部状態ビジュアライズ用に内部状態を計算する """
+        """ Calculate internal states to visualize internal state. """
 
         # (1, 20, 64, 64)
         seq_length = images.shape[1]
@@ -169,15 +169,14 @@ class Trainer(object):
         prior_mus = []
         prior_sigma_sqs = []
 
-        # Stateをリセットする
-
+        # Reset state.
         last_state_h = sess.run(self.predict_model.initial_state_h)
 
         for i in range(seq_length):
             x = images[0, i, :, :]
             x = np.reshape(x, [1, 1, 64 * 64 * 1])
 
-            # feed_dictの準備
+            # Prepare feed_dict
             feed_dict = {}
             feed_dict[self.predict_model.input_data] = x
             for j, last_state_h_j in enumerate(last_state_h):
@@ -205,10 +204,10 @@ class Trainer(object):
             # prior_sigma_sq   [(1, 16), (1, 16)]
 
             def squeeze_vals(vals):
-                # (1,16)とかを(16)にsqueeeする
+                # Squeeze like (1,16) into (16)
                 return [np.squeeze(val) for val in vals]
 
-            # それぞれ現在全階層分の配列になっている
+            # Lists with hierarchy size.
             input_ = squeeze_vals(input_)
             prediction_error = squeeze_vals(prediction_error)
             enc_mu = squeeze_vals(enc_mu)
@@ -226,18 +225,18 @@ class Trainer(object):
             prior_sigma_sqs.append(prior_sigma_sq)
 
         def seperate(vals_seqs):
-            # [seq, 16]みたいなndarrayがlayer_size分ならんだ配列にする
+            # Convert to list of ndarrays of the values like [seq, 16].
             layer_size = len(vals_seqs[0])
             arr = [[] for _ in range(layer_size)]
             for vals in vals_seqs:
                 for i, val in enumerate(vals):
                     arr[i].append(val)
-            # 各要素をndarrayにしておく
+            # Change each element into ndarray.
             return [np.array(a) for a in arr]
 
         def seperate_dec_out(vals_seqs):
-            # [seq, 16]みたいなndarrayがlayer_size分ならんだ配列にするが、
-            # 第一階層のみ、[seq, 64, 64]にする
+            # Convert to list of ndarrays of the values like [seq, 16], but only for the
+            # 1st layer convert to [seq, 64, 64].
             layer_size = len(vals_seqs[0])
             arr = [[] for _ in range(layer_size)]
             for vals in vals_seqs:
@@ -262,20 +261,20 @@ class Trainer(object):
           seperate(prior_sigma_sqs)
 
     def calculate(self, sess, data_index, off_forecast):
-        """ 内部状態ビジュアライズ用に内部状態を計算する """
+        """ Calculate internal states to visualize internal state. """
 
         if off_forecast:
-            # 予測がはずれる様なデータの場合
+            # For the data in which prediction error occurs
             images = self.data_manager.get_off_forecast_test_data(
                 data_index=data_index)
         else:
-            # 予測がはずれないデータの場合
+            # For the data without prediction errro
             images = self.data_manager.get_test_data(data_index=data_index)
-        #images = utils.add_noise(images) # ノイズを入れる
+        #images = utils.add_noise(images) # Add Noise
         return self.calculate_sub(sess, images)
 
     def calculate_for_analyze(self, sess, data_index):
-        """ 内部状態ビジュアライズ用に内部状態を計算する """
+        """ Calculate internal states to visualize internal state. """
         images, _, _, _ = self.data_manager.get_check_plain_data(
             data_index=data_index)
         return self.calculate_sub(sess, images)
@@ -293,7 +292,7 @@ class Trainer(object):
             x = images[0, i, :, :]
             x = np.reshape(x, [1, 1, 64 * 64 * 1])
 
-            # feed_dictの準備
+            # Prepare feed_dict
             feed_dict = {}
             feed_dict[self.predict_model.input_data] = x
             for j, last_state_h_j in enumerate(last_state_h):
@@ -341,14 +340,14 @@ class Trainer(object):
         all_hses = [[] for _ in range(layer_size)]
 
         for i in range(0, data_size, batch_size):
-            # テストデータセットからデータを取ってくる
+            # Get data from test dataset.
             batch_data = self.data_manager.get_test_batch(
                 i, batch_size)
             # batch_data = (batch_size, seq_length, 64, 64)
             batch_data = np.reshape(batch_data,
                                     [batch_size, seq_length, w * h])
 
-            # 毎バッチごとにstateの初期化をするので、stateの更新をしていない
+            # Not updating state because it is initialized with every batch.
             out = sess.run(
                 [
                     self.train_model.zs, self.train_model.hs,
@@ -359,9 +358,8 @@ class Trainer(object):
             # (layer_size, 200, 16)
 
             for j in range(layer_size):
-                # 3階層をそれぞれ別の器に入れていく
+                # Seperate for each hierarchy.
                 all_zses[j].append(zs[j])
-                # (200, 16) を各階層枚にappendしていく
                 all_hses[j].append(hs[j])
 
         all_zses = np.array(all_zses)

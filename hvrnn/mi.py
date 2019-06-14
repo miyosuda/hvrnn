@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# Calculate mutual information between z and the factor using MINE.
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -19,7 +20,7 @@ flags = options.get_options()
 
 
 class ConvMineModel(object):
-    """ X側の入力を画像として、CNNにかけるMINEモデル. """
+    """ MINE model with X input as image and using CNN. """
 
     def __init__(self, name, y_size, filter_size=16):
         self.filter_size = filter_size
@@ -73,11 +74,11 @@ class ConvMineModel(object):
 
             pred_xy = tf.layers.dense(
                 tf.nn.relu(x_flat + fc0_2), 1, name="fc3", reuse=False)
-            # x, y  -> これは大きくする
+            # x, y  -> should be mazimized.
 
             pred_x_y = tf.layers.dense(
                 tf.nn.relu(x_flat + fc1_2), 1, name="fc3", reuse=True)
-            # x, y_shuffle -> これは小さくする
+            # x, y_shuffle -> should be minimized.
 
             self.dual0 = tf.reduce_mean(pred_xy)
             self.dual1 = tf.log(tf.reduce_mean(tf.exp(pred_x_y)))
@@ -96,7 +97,7 @@ class ConvMineModel(object):
 
 
 class FCMineModel(object):
-    """ Factorとzの各次元の値の相互情報量を計算するためのモデル """
+    """ MINE model to calculate factor and each dimension of z. """
 
     def __init__(self, name, unit_size=10):
         self.lr = 0.0001
@@ -120,11 +121,11 @@ class FCMineModel(object):
 
             pred_xy = tf.layers.dense(
                 tf.nn.relu(x_h1 + y_h1), 1, name="fc_xy", reuse=False)
-            # x, y  -> これは大きくする
+            # x, y  -> should be maximized.
 
             pred_x_y = tf.layers.dense(
                 tf.nn.relu(x_h1 + ys_h1), 1, name="fc_xy", reuse=True)
-            # x, y_shuffle -> これは小さくする
+            # x, y_shuffle -> should be minimized.
 
             self.dual0 = tf.reduce_mean(pred_xy)
             self.dual1 = tf.log(tf.reduce_mean(tf.exp(pred_x_y)))
@@ -143,7 +144,7 @@ class FCMineModel(object):
 
 
 def calc_entropy_discrete(values):
-    """ 離散確率変数のエントロピーを求める. """
+    """ Calculate entropy for discrete random variable. """
     ids, counts = np.unique(values, return_counts=True)
     size = np.sum(counts)
     probs = counts / size
@@ -155,7 +156,7 @@ def calc_entropy_discrete(values):
 
 
 def calc_entropy_continuous(values, bin_size=300):
-    """ 連続確率変数のエントロピーを求める. """
+    """ Calculate entropy for continuous random variable. """
     pds, bins = np.histogram(values, bins=bin_size, density=True)
     dx = bins[1] - bins[0]
 
@@ -248,7 +249,7 @@ def analyze_mi(x, y, model, is_image, summary_writer, step_size):
 
 
 def analyze_image_and_vector_mi(x, y, name, summary_writer, step_size):
-    """ 画像とベクトルの相互情報量の算出. """
+    """ Calculate mutual info b/w image and vector. """
     print("analyzing mutual information: {}".format(name))
 
     y_size = y.shape[2]
@@ -262,7 +263,7 @@ def analyze_image_and_vector_mi(x, y, name, summary_writer, step_size):
 
 
 def analyze_scalar_and_scalar_mi(x, y, name, summary_writer, step_size):
-    """ スカラー量同士の相互情報量の算出. """
+    """ Calculate mutual info b/w scalers. """
     # x: (5000, n, 1) ?
     # y: (5000, n)
     print("analyzing mutual information: {}".format(name))
@@ -276,7 +277,7 @@ def analyze_scalar_and_scalar_mi(x, y, name, summary_writer, step_size):
 
 
 def record_mi(f, name, mi, dual0, dual1):
-    """ 相互情報量のファイルへの保存. """
+    """ Save mutual info into file. """
     line = "{0}: {1:.3f}, {2:.3f}, {3:.3f}".format(name, mi, dual0, dual1)
     f.write(line)
     f.write("\n")
@@ -284,38 +285,38 @@ def record_mi(f, name, mi, dual0, dual1):
 
 
 def save_grid_mi_figure(datas, param_names, layer_index):
-    """ 相互情報量のグリッド表示. """
+    """ Grid display of mutual info. """
     plt.figure()
 
     datas = np.array(datas)
 
-    # 出力サイズを640x240に
+    # Make output size 640x240
     fig, ax = plt.subplots(figsize=(6.4, 2.4))
 
-    # カラーバーの縦のサイズをヒートマップに合わせる
+    # Fit vertical size of the color bar as that of the heatmap.
     divider = make_axes_locatable(ax)
     ax_cb = divider.new_horizontal(size="2%", pad=0.05)
 
     fig.add_axes(ax_cb)
 
-    # ヒートマップの表示
+    # Show heatmap
     im = ax.imshow(datas)
 
-    # カラーバー作成
+    # Make colorbar.
     cbar = ax.figure.colorbar(im, cax=ax_cb)
 
-    # Y軸のラベル表示
+    # Show Y axis label.
     ax.set_yticks(np.arange(datas.shape[0]))
     ax.set_yticklabels(param_names)
 
-    # X軸の削除
+    # Remove x axis
     ax.tick_params(labelbottom=False, bottom=False)
     ax.set_xticklabels([])
 
-    # X軸ラベルの表示
+    # Show X axis label.
     ax.set_xlabel("Z")
 
-    # タイトルの表示
+    # Show title.
     ax.set_title("Normalized Mutual Info: Layer{}".format(layer_index + 1))
 
     file_name = "mi_grid_norm_{}.png".format(layer_index)
@@ -326,12 +327,12 @@ def save_grid_mi_figure(datas, param_names, layer_index):
 
 def analyze_input_mi(data_manager, z, h, start_frame, end_frame,
                      summary_writer, step_size):
-    """ Input画像とz, hの相互情報量を算出. """
+    """ Calculate mutual info b/w input image with z and h """
 
     test_images = data_manager.raw_test_images
     # (5000, 20, 64, 64)
 
-    # 最初の数フレームをスキップする
+    # Skip first some frames.
     z = z[:, :, start_frame:end_frame, :]  # (3, 5000, n, 16)
     h = h[:, :, start_frame:end_frame, :]  # (3, 5000, n, 256)
     x = test_images[:, start_frame:end_frame, :, :]  # (5000, n, 64, 64)
@@ -357,7 +358,7 @@ def analyze_input_mi(data_manager, z, h, start_frame, end_frame,
 
 def analyze_factor_mi(data_manager, z, start_frame, end_frame, summary_writer,
                       step_size):
-    """ Inputの各ファクターとzの各次元の相互情報量を算出. """
+    """ Calculate mutual info b/w each factor of the input and each dimension of z. """
 
     test_analysis_data = data_manager.test_analysis_data
 
@@ -370,11 +371,11 @@ def analyze_factor_mi(data_manager, z, start_frame, end_frame, summary_writer,
 
     seq_length = pos_x.shape[1]
 
-    # Labe, Speedもシーケンス長ぶんに伸ばす
+    # Extend label and speed as sequence length.
     label = np.repeat(label, seq_length).reshape([-1, seq_length])
     speed = np.repeat(speed, seq_length).reshape([-1, seq_length])
 
-    # 最初の数フレームを外す
+    # Remove first some frames.
     z = z[:, :, start_frame:end_frame, :]  # (3, 5000, n, 16)
 
     pos_x = pos_x[:, start_frame:end_frame]  # (5000, n)
@@ -401,13 +402,13 @@ def analyze_factor_mi(data_manager, z, start_frame, end_frame, summary_writer,
     factor_mi_normalized_results = np.empty(
         [layer_size, len(factors), z_dim], np.float32)
 
-    # ファクターのエントロピーの算出
-    # 連続ファクターのエントロピー計算
+    # Calculate entropy of the factor.
+    # Calculate entropy of continuous factor.
     pos_x_h = calc_entropy_continuous(
         pos_x.reshape([-1]), bin_size=300)  # 3.68
     pos_y_h = calc_entropy_continuous(
         pos_y.reshape([-1]), bin_size=300)  # 3.67
-    # 離散ファクターのエントロピー計算
+    # Calculate entropy of discrete factor.
     label_h = calc_entropy_discrete(label.reshape([-1]))  # 2.30
     speed_h = calc_entropy_discrete(speed.reshape([-1]))  # 1.61
     bounce_x_h = calc_entropy_discrete(bounce_x.reshape([-1]))  # 0.31
@@ -420,13 +421,13 @@ def analyze_factor_mi(data_manager, z, start_frame, end_frame, summary_writer,
                                           range(len(factors))):
             for k in range(z_dim):
                 name = "mi_f_{}_{}_z{}".format(i, factor_name, k)
-                z_layer = z[i]  # レイヤーのz
-                z_i = z_layer[:, :, k]  # zの1つの次元
+                z_layer = z[i]  # z of each layer
+                z_i = z_layer[:, :, k]  # one dim of z
                 mi, dual0, dual1 = analyze_scalar_and_scalar_mi(
                     factor, z_i, name, summary_writer, step_size)
                 record_mi(f, name, mi, dual0, dual1)
                 factor_mi_raw_results[i, j, k] = mi
-                # 各Factorのエントロピーで相互情報量をノーマライズ
+                # Nomalize mutual info with entropy of each factor.
                 factor_mi_normalized_results[i, j, k] = mi / factor_hs[j]
     f.close()
 
@@ -439,7 +440,7 @@ def analyze_factor_mi(data_manager, z, start_frame, end_frame, summary_writer,
 
 
 def analyze(data_manager):
-    """ BSpriteデータセットの相互情報量分析. """
+    """ Mutual info analysis. """
     print("analyzing data")
 
     data_path = flags.save_dir + "/analysis_data.npz"
@@ -448,7 +449,7 @@ def analyze(data_manager):
     z = data["z"]  # (layer_size, 5000, seq_length, latent_size))
     h = data["h"]  # (layer_size, 5000, seq_length, latent_size))
 
-    # 開始フレームと終了フレームを指定した場合
+    # Set start and end frame
     start_frame = 5
     end_frame = 20
 
@@ -457,84 +458,12 @@ def analyze(data_manager):
 
     step_size = 100000
 
-    # 入力Xとz, hの相互情報量を計算
+    # Analyze mutual info b/w input X and z,h.
     #analyze_input_mi(data_manager, z, h, start_frame, end_frame, summary_writer, step_size)
 
-    # Factorとzの相互情報量
+    # Calculate mutual info b/w factor and z.
     analyze_factor_mi(data_manager, z, start_frame, end_frame, summary_writer,
                       step_size)
-
-
-def fix_old_mi_data(data_manager):
-    """ ノーマライズされていなかった古いデータをノーマライズして修正 """
-
-    test_analysis_data = data_manager.test_analysis_data
-
-    pos_x = test_analysis_data["pos_x"]  # (5000, 20)
-    pos_y = test_analysis_data["pos_y"]  # (5000, 20)
-    label = test_analysis_data["label"]  # (5000,)
-    speed = test_analysis_data["speed"]  # (5000,)
-    bounce_x = test_analysis_data["bounce_x"]  # (5000, 20)
-    bounce_y = test_analysis_data["bounce_y"]  # (5000, 20)
-
-    seq_length = pos_x.shape[1]
-
-    # Labe, Speedもシーケンス長ぶんに伸ばす
-    label = np.repeat(label, seq_length).reshape([-1, seq_length])
-    speed = np.repeat(speed, seq_length).reshape([-1, seq_length])
-
-    # 開始フレームと終了フレームを指定
-    start_frame = 5
-    end_frame = 20
-
-    pos_x = pos_x[:, start_frame:end_frame]  # (5000, n)
-    pos_y = pos_y[:, start_frame:end_frame]  # (5000, n)
-    label = label[:, start_frame:end_frame]  # (5000, n)
-    speed = speed[:, start_frame:end_frame]  # (5000, n)
-    bounce_x = bounce_x[:, start_frame:end_frame]  # (5000, n)
-    bounce_y = bounce_y[:, start_frame:end_frame]  # (5000, n)
-
-    # ファクターのエントロピーの算出
-    # 連続ファクターのエントロピー計算
-    pos_x_h = calc_entropy_continuous(
-        pos_x.reshape([-1]), bin_size=300)  # 3.68
-    pos_y_h = calc_entropy_continuous(
-        pos_y.reshape([-1]), bin_size=300)  # 3.67
-    # 離散ファクターのエントロピー計算
-    label_h = calc_entropy_discrete(label.reshape([-1]))  # 2.30
-    speed_h = calc_entropy_discrete(speed.reshape([-1]))  # 1.61
-    bounce_x_h = calc_entropy_discrete(bounce_x.reshape([-1]))  # 0.31
-    bounce_y_h = calc_entropy_discrete(bounce_y.reshape([-1]))  # 0.31
-
-    factor_hs = [pos_x_h, pos_y_h, label_h, speed_h, bounce_x_h, bounce_y_h]
-
-    factors = [pos_x, pos_y, label, speed, bounce_x, bounce_y]
-    factor_names = ["pos_x", "pos_y", "label", "speed", "bounce_x", "bounce_y"]
-    param_names = ["Pos X", "Pos Y", "Label", "Speed", "Bounce X", "Bounce Y"]
-
-    mi_data_path = flags.save_dir + "/mi_data.npy"
-    factor_mi_raw_results = np.load(mi_data_path)
-    # (3, 6, 16)
-
-    layer_size = factor_mi_raw_results.shape[0]
-    z_dim = factor_mi_raw_results.shape[2]
-
-    factor_mi_normalized_results = np.empty(
-        [layer_size, len(factors), z_dim], np.float32)
-
-    for i in range(layer_size):
-        for factor, factor_name, j in zip(factors, factor_names,
-                                          range(len(factors))):
-            for k in range(z_dim):
-                mi = factor_mi_raw_results[i, j, k]
-                # 各Factorのエントロピーで相互情報量をノーマライズ
-                factor_mi_normalized_results[i, j, k] = mi / factor_hs[j]
-
-    for i in range(layer_size):
-        save_grid_mi_figure(factor_mi_normalized_results[i], param_names, i)
-
-    np.save(flags.save_dir + "/mi_data_normalized",
-            factor_mi_normalized_results)
 
 
 def main():
@@ -546,8 +475,6 @@ def main():
     dataset_type = flags.dataset_type
 
     analyze(data_manager)
-
-    #fix_old_mi_data(data_manager)
 
 
 if __name__ == '__main__':
